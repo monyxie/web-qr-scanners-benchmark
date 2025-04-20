@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR Code Scanner Performance Test</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        line-height: 1.6;
+        padding: 20px;
+      }
+      #controls,
+      #results,
+      #status {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      #controls label {
+        margin-right: 10px;
+      }
+      #results h2,
+      #status h2 {
+        margin-top: 0;
+      }
+      #results pre {
+        background-color: #f4f4f4;
+        padding: 10px;
+        border-radius: 3px;
+        white-space: pre-wrap; /* Allow wrapping */
+        word-wrap: break-word; /* Break long words */
+        font-family: mono;
+      }
+      button {
+        padding: 10px 15px;
+        cursor: pointer;
+      }
+      .hidden {
+        display: none;
+      }
+      /* Add a hidden canvas for OpenCV */
+      #cvCanvas {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>QR Code Scanner Performance Test</h1>
+
+    <div id="controls">
+      <h2>Controls</h2>
+      <label for="librarySelect">Choose Library:</label>
+      <select id="librarySelect"></select>
+      <button id="startButton" disabled>Start Test (Wait for Libraries)</button>
+    </div>
+
+    <div id="status" class="hidden">
+      <h2>Test Status</h2>
+      <p id="statusText">Initializing...</p>
+      <progress
+        id="progressBar"
+        value="0"
+        max="100"
+        style="width: 100%"
+      ></progress>
+    </div>
+
+    <div id="results" class="hidden">
+      <h2>Test Results</h2>
+      <pre id="resultsText">Results will appear here...</pre>
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>Image</th>
+            <th>Result</th>
+            <th>Success?</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <canvas id="cvCanvas"></canvas>
+    <img id="testImageElement" class="hidden" alt="Test Image" />
+
+    <script type="module">
+      // --- Global Variables ---
+      let cvInstance = null;
+      let currentTestRunning = false;
+      let opencvDecoder = null;
+      let opencvArucoDecoder = null;
+      let opencvWechatDecoder = null;
+
+      async function getZxingTestImages() {
+        const urls = (await (await fetch("/images-zxing/images.json")).json())
+          .images;
+        const images = [];
+        for (let i = 0; i < urls.length; i++) {
+          images.push({
+            url: urls[i],
+            // content: await fetch(`${urls[i].replace(/\.png$/, ".txt")}`).then(
+            //   (r) => r.text
+            // ),
+          });
+        }
+        return images;
+      }
+
+      const testSubjects = {
+        zxing: {
+          disabled: true
+          name: "ZXing-js",
+          url: "/libs/@zxing_library.min.js",
+          checkFunc: () => typeof ZXing !== "undefined",
+          scanFunc: async (imgElement) => {
+            const codeReader = new ZXing.BrowserQRCodeReader();
+            let result = null;
+            let success = false;
+            const startTime = performance.now();
+            try {
+              const decodeResult = await codeReader.decodeFromImageElement(
+                imgElement
+              );
+              result = decodeResult.getText();
+              success = true;
+              // console.log(`ZXing decoded: ${result}`);
+            } catch (err) {
+              // ZXing throws an error if not found, which is expected
+              if (err instanceof ZXing.NotFoundException) {
+                // console.log('ZXing: QR Code not found.');
+              } else if (err instanceof ZXing.ChecksumException) {
+                console.warn("ZXing Checksum error:", err);
+              } else if (err instanceof ZXing.FormatException) {
+                console.warn("ZXing Format error:", err);
+              } else {
+                console.error("ZXing Error:", err);
+              }
+              success = false;
+              result = null;
+            }
+            const endTime = performance.now();
+            return { success, result, time: endTime - startTime };
+          },
+        },
+        opencv: {
+          name: "OpenCV.js",
+          url: "/opencv/build_wasm/bin/opencv.js",
+          checkFunc: async () => {
+            let promise = null;
+            if (!(cv instanceof Promise)) {
+              promise = Promise.resolve(cv);
+            } else {
+              promise = cv;
+            }
+
+            try {
+              cvInstance = await promise;
+
+              if (
+                typeof cvInstance !== "undefined" &&
+                cvInstance.getBuildInformation()
+              ) {
+                opencvDecoder = new cvInstance.QRCodeDetector();
+                return true;
+              }
+            } catch (e) {
+              console.log(e);
+            }
+
+            return false;
+          },
+          scanFunc: async (imgElement) => {
+            if (!cvInstance) {
+              console.error("OpenCV is not ready for scanning.");
+              return { success: false, result: null, time: 0 };
+            }
+
+            let result = null;
+            let success = false;
+            let processingTime = 0;
+            let src = null;
+            let points = null; // Variable to hold points matrix
+
+            const startTime = performance.now();
+            try {
+              // Draw image onto canvas to get ImageData
+              const ctx = cvCanvas.getContext("2d", {
+                willReadFrequently: true,
+              });
+              cvCanvas.width = imgElement.naturalWidth;
+              cvCanvas.height = imgElement.naturalHeight;
+              ctx.drawImage(
+                imgElement,
+                0,
+                0,
+                imgElement.naturalWidth,
+                imgElement.naturalHeight
+              );
+
+              // Read image data using OpenCV
+              src = cvInstance.imread(cvCanvas);
+              points = new cvInstance.Mat(); // Mat to store the points
+
+              // Detect and Decode
+              result = opencvDecoder.detectAndDecode(src, points);
+
+              if (result && result.length > 0) {
+                // console.log(`OpenCV decoded: ${result}`);
+                success = true;
+              } else {
+                // console.log('OpenCV: QR Code not found or could not be decoded.');
+                success = false;
+                result = null; // Ensure result is null on failure
+              }
+            } catch (err) {
+              console.error("OpenCV Error:", err);
+              success = false;
+              result = null;
+            } finally {
+              // IMPORTANT: Clean up OpenCV Mats to prevent memory leaks
+              if (src) src.delete();
+              if (points) points.delete();
+              //   opencvDecoder.delete(); // Clean up the detector object itself
+            }
+            const endTime = performance.now();
+            processingTime = endTime - startTime;
+            return { success, result, time: processingTime };
+          },
+        },
+        opencv_aruco: {
+          name: "OpenCV.js (Aruco)",
+          checkFunc: async () => {
+            if (!cvInstance) {
+              return false;
+            }
+            opencvArucoDecoder = new cvInstance.QRCodeDetectorAruco();
+            return !!opencvArucoDecoder;
+          },
+          scanFunc: async (imgElement) => {
+            if (!cvInstance) {
+              console.error("OpenCV is not ready for scanning.");
+              return { success: false, result: null, time: 0 };
+            }
+
+            let result = null;
+            let success = false;
+            let processingTime = 0;
+            let src = null;
+            let points = null; // Variable to hold points matrix
+
+            const startTime = performance.now();
+            try {
+              // Draw image onto canvas to get ImageData
+              const ctx = cvCanvas.getContext("2d", {
+                willReadFrequently: true,
+              });
+              cvCanvas.width = imgElement.naturalWidth;
+              cvCanvas.height = imgElement.naturalHeight;
+              ctx.drawImage(
+                imgElement,
+                0,
+                0,
+                imgElement.naturalWidth,
+                imgElement.naturalHeight
+              );
+
+              // Read image data using OpenCV
+              src = cvInstance.imread(cvCanvas);
+              points = new cvInstance.Mat(); // Mat to store the points
+
+              // Detect and Decode
+              result = opencvArucoDecoder.detectAndDecode(src, points);
+
+              if (result && result.length > 0) {
+                // console.log(`OpenCV decoded: ${result}`);
+                success = true;
+              } else {
+                // console.log('OpenCV: QR Code not found or could not be decoded.');
+                success = false;
+                result = null; // Ensure result is null on failure
+              }
+            } catch (err) {
+              console.error("OpenCV Error:", err);
+              success = false;
+              result = null;
+            } finally {
+              // IMPORTANT: Clean up OpenCV Mats to prevent memory leaks
+              if (src) src.delete();
+              if (points) points.delete();
+              //   opencvArucoDecoder.delete(); // Clean up the detector object itself
+            }
+            const endTime = performance.now();
+            processingTime = endTime - startTime;
+            return { success, result, time: processingTime };
+          },
+        },
+        opencv_wechat: {
+          name: "OpenCV.js (Wechat)",
+          url: null,
+          checkFunc: async () => {
+            if (!cvInstance) {
+              return false;
+            }
+            const files = [
+              "detect.prototxt",
+              "detect.caffemodel",
+              "sr.prototxt",
+              "sr.caffemodel",
+            ];
+
+            async function res2ArrayBuffer(response) {
+              const data = await response.arrayBuffer();
+              return new Uint8Array(data);
+            }
+            try {
+              await Promise.all(
+                files.map(async (file) => {
+                  const response = await fetch(
+                    "/opencv/build_wasm/downloads/wechat_qrcode/" + file
+                  );
+                  const content = await res2ArrayBuffer(response);
+                  cvInstance.FS_createDataFile(
+                    "/",
+                    file,
+                    content,
+                    true,
+                    false,
+                    false
+                  );
+                })
+              );
+
+              opencvWechatDecoder = new cvInstance.wechat_qrcode_WeChatQRCode(
+                ...files.map((a) => "/" + a)
+              );
+
+              return !!opencvWechatDecoder;
+            } catch (e) {
+              console.error(e);
+              return false;
+            }
+          },
+          scanFunc: async (imgElement) => {
+            if (!cvInstance) {
+              console.error("OpenCV is not ready for scanning.");
+              return { success: false, result: null, time: 0 };
+            }
+
+            let result = null;
+            let success = false;
+            let processingTime = 0;
+            let src = null;
+            let points = null; // Variable to hold points matrix
+
+            const startTime = performance.now();
+            try {
+              // Draw image onto canvas to get ImageData
+              const ctx = cvCanvas.getContext("2d", {
+                willReadFrequently: true,
+              });
+              cvCanvas.width = imgElement.naturalWidth;
+              cvCanvas.height = imgElement.naturalHeight;
+              ctx.drawImage(
+                imgElement,
+                0,
+                0,
+                imgElement.naturalWidth,
+                imgElement.naturalHeight
+              );
+
+              // Read image data using OpenCV
+              src = cvInstance.imread(cvCanvas);
+              points = new cvInstance.MatVector(); // Mat to store the points
+
+              // Detect and Decode
+              const qrRes = opencvWechatDecoder.detectAndDecode(src, points);
+
+              if (qrRes && qrRes.size() > 0) {
+                // console.log(`OpenCV decoded: ${result}`);
+                result = qrRes.get(0);
+                success = true;
+              } else {
+                // console.log('OpenCV: QR Code not found or could not be decoded.');
+                success = false;
+                result = null; // Ensure result is null on failure
+              }
+            } catch (err) {
+              console.error("OpenCV Error:", err);
+              success = false;
+              result = null;
+            } finally {
+              // IMPORTANT: Clean up OpenCV Mats to prevent memory leaks
+              if (src) src.delete();
+              if (points) points.delete();
+              //   opencvDecoder.delete(); // Clean up the detector object itself
+            }
+            const endTime = performance.now();
+            processingTime = endTime - startTime;
+            return { success, result, time: processingTime };
+          },
+        },
+      };
+
+      // --- Configuration ---
+      const testImages = await getZxingTestImages();
+
+      // --- UI Elements ---
+      const librarySelect = document.getElementById("librarySelect");
+      const startButton = document.getElementById("startButton");
+      const statusDiv = document.getElementById("status");
+      const statusText = document.getElementById("statusText");
+      const progressBar = document.getElementById("progressBar");
+      const resultsDiv = document.getElementById("results");
+      const resultsText = document.getElementById("resultsText");
+      const resultsTable = document.getElementById("resultsTable");
+      const testImageElement = document.getElementById("testImageElement");
+      const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
+
+      // --- Library Readiness Check ---
+      function checkAllLibrariesReady() {
+        if (librarySelect.value) {
+          // Ensure there are options
+          startButton.disabled = false;
+          startButton.textContent = "Start Test";
+        } else {
+          startButton.textContent = "No Libraries Ready";
+          startButton.disabled = true;
+        }
+      }
+
+      librarySelect.addEventListener("change", checkAllLibrariesReady);
+
+      // --- Test Execution Logic ---
+      async function runTest() {
+        if (currentTestRunning) {
+          console.warn("Test already in progress.");
+          return;
+        }
+        currentTestRunning = true;
+
+        const selectedLibrary = librarySelect.value;
+        const scannerFunction = testSubjects[selectedLibrary].scanFunc;
+
+        if (!scannerFunction) {
+          alert(`Scanner implementation for "${selectedLibrary}" not found.`);
+          currentTestRunning = false;
+          return;
+        }
+
+        // Special check for OpenCV readiness before starting the loop
+        if (selectedLibrary === "opencv" && !cvInstance) {
+          alert(
+            "OpenCV.js is not ready. Please wait or check the console for errors."
+          );
+          currentTestRunning = false;
+          return;
+        }
+
+        startButton.disabled = true;
+        startButton.textContent = "Test Running...";
+        resultsDiv.classList.add("hidden");
+        statusDiv.classList.remove("hidden");
+        statusText.textContent = `Starting test for ${selectedLibrary}...`;
+        progressBar.value = 0;
+
+        let successfulScans = 0;
+        let totalScanTime = 0;
+        let successfulScanTime = 0;
+        const totalImages = testImages.length;
+        const resultsData = []; // Store individual results if needed
+
+        const overallStartTime = performance.now();
+
+        for (let i = 0; i < totalImages; i++) {
+          const imageUrl = testImages[i].url;
+          statusText.textContent = `Testing image ${
+            i + 1
+          } of ${totalImages}: ${imageUrl}`;
+          progressBar.value = ((i + 1) / totalImages) * 100;
+
+          try {
+            // Load the image
+            const imgLoadPromise = new Promise((resolve, reject) => {
+              testImageElement.onload = () => resolve(testImageElement);
+              testImageElement.onerror = (err) =>
+                reject(`Failed to load image: ${imageUrl}`);
+              // Add cache buster to ensure fresh load if needed, or handle CORS appropriately
+              testImageElement.src =
+                imageUrl +
+                (imageUrl.includes("?") ? "&" : "?") +
+                "t=" +
+                Date.now();
+              // For cross-origin images, you might need:
+              // testImageElement.crossOrigin = "Anonymous";
+            });
+
+            const loadedImgElement = await imgLoadPromise;
+
+            // Run the selected scanner
+            const scanResult = await scannerFunction(loadedImgElement);
+            resultsData.push({ imageUrl, ...scanResult }); // Store detailed result
+
+            totalScanTime += scanResult.time;
+            if (scanResult.success) {
+              successfulScans++;
+              successfulScanTime += scanResult.time;
+            }
+          } catch (error) {
+            console.error(`Error processing image ${imageUrl}:`, error);
+            resultsData.push({
+              imageUrl,
+              success: false,
+              result: `Error: ${error}`,
+              time: 0,
+            });
+            statusText.textContent = `Error on image ${
+              i + 1
+            }: ${error}. Continuing...`;
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Brief pause on error
+          }
+          // Add a small delay between scans to prevent potential rate limiting or browser freeze on many images
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        const overallEndTime = performance.now();
+        const totalTestTime = overallEndTime - overallStartTime;
+
+        // --- Calculate and Display Metrics ---
+        displayResults({
+          library: selectedLibrary,
+          totalImages: totalImages,
+          successfulScans: successfulScans,
+          successRate:
+            totalImages > 0 ? (successfulScans / totalImages) * 100 : 0,
+          avgScanTime:
+            successfulScans > 0 ? successfulScanTime / successfulScans : 0,
+          totalTestDuration: totalTestTime,
+          individualResults: resultsData, // Pass detailed results if needed for display
+        });
+
+        // --- Cleanup ---
+        statusDiv.classList.add("hidden");
+        startButton.disabled = false;
+        startButton.textContent = "Start Test";
+        currentTestRunning = false;
+      }
+
+      function displayResults(metrics) {
+        resultsDiv.classList.remove("hidden");
+        let resultsOutput = `
+              Library: ${metrics.library}
+              -----------------------------------
+              Total Images Tested:    ${metrics.totalImages}
+              Successfully Decoded:   ${metrics.successfulScans}
+              Success Rate:           ${metrics.successRate.toFixed(2)}%
+              Average Time (Success): ${metrics.avgScanTime.toFixed(2)} ms
+              Total Test Time:        ${metrics.totalTestDuration.toFixed(2)} ms
+              -----------------------------------
+              `;
+        resultsText.textContent = resultsOutput;
+
+        const tbody = resultsTable.querySelector("tbody");
+        tbody.innerHTML = ""; // Clear existing rows)
+        metrics.individualResults.forEach((res, index) => {
+          const row = tbody.insertRow();
+          row.style.backgroundColor = res.success ? "" : "pink";
+          row.insertCell().textContent = index + 1;
+          row.insertCell().innerHTML = `<a href="${res.imageUrl}">View</a>`;
+          row.insertCell().innerHTML = res.success
+            ? `<code>${res.result}</code>`
+            : "";
+          row.insertCell().innerHTML = `${res.success}`;
+          row.insertCell().textContent = `${res.time.toFixed(2)} ms`;
+        });
+      }
+
+      // --- Event Listener ---
+      startButton.addEventListener("click", runTest);
+
+      function loadScript(src) {
+        if (!src) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.addEventListener("load", resolve);
+          script.addEventListener("error", reject);
+          script.src = src;
+          document.body.append(script);
+        });
+      }
+
+      for (const key in testSubjects) {
+        const s = testSubjects[key];
+        if (s.disabled) {
+          continue;
+        }
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = s.name + " (loading)";
+        option.disabled = true;
+        librarySelect.appendChild(option);
+        try {
+          await loadScript(s.url);
+          if (await s.checkFunc()) {
+            option.disabled = false;
+            option.textContent = s.name;
+            checkAllLibrariesReady();
+
+            continue;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        console.error("Failed to load " + s.name);
+        option.textContent = s.name + " (Load Failed)";
+        option.disabled = true;
+        checkAllLibrariesReady();
+      }
+    </script>
+  </body>
+</html>
