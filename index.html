@@ -52,6 +52,10 @@
         border-collapse: collapse;
         margin: 2em 0;
       }
+      thead {
+        position: sticky;
+        top: 0;
+      }
       td {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -63,6 +67,9 @@
       }
       th {
         background: bisque;
+      }
+      tbody > tr:hover {
+        background-color: beige;
       }
     </style>
   </head>
@@ -143,7 +150,7 @@
       const resultsSummaryTbody = resultsSummary.querySelector("tbody");
       const resultsTable = document.getElementById("resultsTable");
       const resultsTableThead = resultsTable.querySelector("thead");
-      const resultsTableTbody = resultsTable.querySelector("thead");
+      const resultsTableTbody = resultsTable.querySelector("tbody");
       const testImageElement = document.getElementById("testImageElement");
       const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
@@ -705,7 +712,6 @@
           metrics.totalScanTime.toFixed(2) + " ms";
 
         const tbody = resultsTable.querySelector("tbody");
-        tbody.innerHTML = ""; // Clear existing rows)
         metrics.individualResults.forEach((res, index) => {
           const cell = document.querySelector(
             `#res_cell_${metrics.library + "_" + index}`
