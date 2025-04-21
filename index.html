@@ -148,18 +148,14 @@
       const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
       async function getZxingTestImages() {
-        const urls = (await (await fetch("images/zxing/images.json")).json())
-          .images;
-        const images = [];
-        for (let i = 0; i < urls.length; i++) {
-          images.push({
-            url: "images/zxing/" + urls[i],
-            content: await fetch(
-              `images/zxing/${urls[i].replace(/\.png$/, ".txt")}`
-            ).then((r) => r.text()),
-          });
-        }
-        return images;
+        return (
+          await (await fetch("images/zxing/images.json")).json()
+        ).images.map((a) => {
+          return {
+            ...a,
+            url: `images/zxing/${a.url}`,
+          };
+        });
       }
 
       // --- Configuration ---
