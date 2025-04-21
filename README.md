@@ -1,4 +1,4 @@
-Benchmarks of web-based QR code scanners
+Benchmarking web-based QR code scanners
 ===
 
 A custom build of OpenCV is required. You can use the script in `opencv/` to generate such build.
