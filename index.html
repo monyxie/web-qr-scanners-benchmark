@@ -148,15 +148,15 @@
       const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
       async function getZxingTestImages() {
-        const urls = (await (await fetch("/images/zxing/images.json")).json())
+        const urls = (await (await fetch("images/zxing/images.json")).json())
           .images;
         const images = [];
         for (let i = 0; i < urls.length; i++) {
           images.push({
-            url: urls[i],
-            content: await fetch(`${urls[i].replace(/\.png$/, ".txt")}`).then(
-              (r) => r.text()
-            ),
+            url: "images/zxing/" + urls[i],
+            content: await fetch(
+              `images/zxing/${urls[i].replace(/\.png$/, ".txt")}`
+            ).then((r) => r.text()),
           });
         }
         return images;
@@ -168,7 +168,7 @@
       const testLibraries = {
         zxing: {
           name: "ZXing-js",
-          url: "/zxing-js/index.min.js",
+          url: "zxing-js/index.min.js",
           checkFunc: () => typeof ZXing !== "undefined",
           scanFunc: async (imgElement) => {
             const codeReader = new ZXing.BrowserQRCodeReader();
@@ -202,7 +202,7 @@
         },
         opencv: {
           name: "OpenCV.js",
-          url: "/opencv/build_wasm/bin/opencv.js",
+          url: "opencv/build_wasm/bin/opencv.js",
           checkFunc: async () => {
             let promise = null;
             if (!(cv instanceof Promise)) {
@@ -374,7 +374,7 @@
               await Promise.all(
                 files.map(async (file) => {
                   const response = await fetch(
-                    "/opencv/build_wasm/downloads/wechat_qrcode/" + file
+                    "opencv/build_wasm/downloads/wechat_qrcode/" + file
                   );
                   const content = await res2ArrayBuffer(response);
                   cvInstance.FS_createDataFile(

@@ -1,3 +1,5 @@
-/build_wasm/
+/build_wasm/*
 /opencv/
 /opencv_contrib/
+!/build_wasm/downloads/
+!/build_wasm/bin/
