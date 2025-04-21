@@ -83,9 +83,15 @@
     </p>
     <div id="controls">
       <h2>Controls</h2>
+      <label for="imageSetSelect">Choose Image Set:</label>
+      <select id="imageSetSelect">
+        <option value="">------</option>
+      </select>
       <label for="librarySelect">Choose Library:</label>
-      <select id="librarySelect"></select>
-      <button id="startButton" disabled>Start Test (Wait for Libraries)</button>
+      <select id="librarySelect">
+        <option value="">------</option>
+      </select>
+      <button id="startButton" disabled>Start Test</button>
     </div>
 
     <div id="status" class="hidden">
@@ -120,7 +126,6 @@
           <tr>
             <th>No.</th>
             <th>Image</th>
-            <th>Content</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -141,6 +146,7 @@
 
       // --- UI Elements ---
       const librarySelect = document.getElementById("librarySelect");
+      const imageSetSelect = document.getElementById("imageSetSelect");
       const startButton = document.getElementById("startButton");
       const statusDiv = document.getElementById("status");
       const statusText = document.getElementById("statusText");
@@ -154,20 +160,9 @@
       const testImageElement = document.getElementById("testImageElement");
       const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
-      async function getZxingTestImages() {
-        return (
-          await (await fetch("images/zxing/images.json")).json()
-        ).images.map((a) => {
-          return {
-            ...a,
-            url: `images/zxing/${a.url}`,
-          };
-        });
-      }
+      const imageSets = await (await fetch("images/images.json")).json();
 
       // --- Configuration ---
-      const testImages = await getZxingTestImages();
-
       const testLibraries = {
         zxing: {
           name: "ZXing-js",
@@ -547,7 +542,9 @@
         resultsTableThead.firstElementChild.appendChild(cell);
 
         const summaryRow = resultsSummaryTbody.insertRow();
-        summaryRow.insertCell().textContent = testLibraries[k].name;
+        const th = document.createElement("th");
+        th.textContent = testLibraries[k].name;
+        summaryRow.appendChild(th);
         summaryRow.insertCell().id = `${k}_total`;
         summaryRow.insertCell().id = `${k}_success`;
         summaryRow.insertCell().id = `${k}_rate`;
@@ -555,29 +552,54 @@
         summaryRow.insertCell().id = `${k}_failAvgTime`;
         summaryRow.insertCell().id = `${k}_totalTime`;
       }
-      testImages.forEach((image, index) => {
-        const row = resultsTableTbody.insertRow();
-        row.insertCell().textContent = index + 1;
-        row.insertCell().innerHTML = `<a href="${image.url}">View</a>`;
-        row.insertCell().innerHTML = `<code>${image.content}</code>`;
-        for (const k in testLibraries) {
-          row.insertCell().id = `res_cell_${k + "_" + index}`;
-        }
-      });
 
-      // --- Library Readiness Check ---
-      function checkAllLibrariesReady() {
-        if (librarySelect.value) {
+      // --- Readiness Check ---
+      function checkIfReadyToStart() {
+        if (librarySelect.value && imageSetSelect.value) {
           // Ensure there are options
           startButton.disabled = false;
-          startButton.textContent = "Start Test";
         } else {
-          startButton.textContent = "No Libraries Ready";
           startButton.disabled = true;
         }
       }
 
-      librarySelect.addEventListener("change", checkAllLibrariesReady);
+      let imageSetSelectPrevValue = null;
+      librarySelect.addEventListener("change", checkIfReadyToStart);
+      imageSetSelect.addEventListener("change", (e) => {
+        debugger;
+
+        if (
+          imageSetSelectPrevValue &&
+          imageSetSelectPrevValue !== e.target.value
+        ) {
+          if (
+            !confirm(
+              "Changing image set will clear the current results. Continue?"
+            )
+          ) {
+            e.target.value = imageSetSelectPrevValue;
+            return false;
+          }
+        }
+        startButton.disabled = true;
+        imageSetSelectPrevValue = e.target.value;
+        resultsTableTbody.innerHTML = "";
+        imageSets[e.target.value].forEach((image, index) => {
+          const row = resultsTableTbody.insertRow();
+          row.insertCell().textContent = index + 1;
+          row.insertCell().innerHTML = `<a href="${encodeURI(
+            image.url
+          )}">View</a>`;
+          for (const k in testLibraries) {
+            row.insertCell().id = `res_cell_${k + "_" + index}`;
+          }
+        });
+
+        resultsSummaryTbody
+          .querySelectorAll("td")
+          .forEach((td) => (td.textContent = ""));
+        checkIfReadyToStart();
+      });
 
       // --- Test Execution Logic ---
       async function runTest() {
@@ -588,6 +610,9 @@
         currentTestRunning = true;
 
         const selectedLibrary = librarySelect.value;
+        const selectedImageSet = imageSetSelect.value;
+        const testImages = imageSets[selectedImageSet];
+
         const scannerFunction = testLibraries[selectedLibrary].scanFunc;
 
         if (!scannerFunction) {
@@ -755,8 +780,6 @@
           if (await s.checkFunc()) {
             option.disabled = false;
             option.textContent = s.name;
-            checkAllLibrariesReady();
-
             continue;
           }
         } catch (e) {
@@ -765,7 +788,17 @@
         console.error("Failed to load " + s.name);
         option.textContent = s.name + " (Load Failed)";
         option.disabled = true;
-        checkAllLibrariesReady();
+      }
+
+      for (const key in imageSets) {
+        const s = imageSets[key];
+        if (s.disabled) {
+          continue;
+        }
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = `${key} (${imageSets[key].length})`;
+        imageSetSelect.appendChild(option);
       }
     </script>
   </body>
