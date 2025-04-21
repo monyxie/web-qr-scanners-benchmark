@@ -34,7 +34,7 @@
         font-family: mono;
       }
       button {
-        padding: 10px 15px;
+        padding: 0 15px;
         cursor: pointer;
       }
       .hidden {
@@ -43,6 +43,26 @@
       /* Add a hidden canvas for OpenCV */
       #cvCanvas {
         display: none;
+      }
+      table {
+        max-width: 100%;
+        table-layout: fixed;
+        width: 100%;
+        border: 1px solid #ccc;
+        border-collapse: collapse;
+        margin: 2em 0;
+      }
+      td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+      }
+      th {
+        background: bisque;
       }
     </style>
   </head>
@@ -67,17 +87,28 @@
       ></progress>
     </div>
 
-    <div id="results" class="hidden">
+    <div id="results">
       <h2>Test Results</h2>
-      <pre id="resultsText">Results will appear here...</pre>
+      <table id="resultsSummary">
+        <thead>
+          <tr>
+            <th>Library</th>
+            <th>Total Images Tested</th>
+            <th>Successfully Decoded</th>
+            <th>Success Rate</th>
+            <th>Average Time (Success)</th>
+            <th>Average Time (Failure)</th>
+            <th>Total Scan Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
       <table id="resultsTable">
         <thead>
           <tr>
             <th>No.</th>
             <th>Image</th>
-            <th>Result</th>
-            <th>Success?</th>
-            <th>Time</th>
+            <th>Content</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -94,27 +125,45 @@
       let opencvDecoder = null;
       let opencvArucoDecoder = null;
       let opencvWechatDecoder = null;
+      let opencvWechatNoModelDecoder = null;
+
+      // --- UI Elements ---
+      const librarySelect = document.getElementById("librarySelect");
+      const startButton = document.getElementById("startButton");
+      const statusDiv = document.getElementById("status");
+      const statusText = document.getElementById("statusText");
+      const progressBar = document.getElementById("progressBar");
+      const resultsDiv = document.getElementById("results");
+      const resultsSummary = document.getElementById("resultsSummary");
+      const resultsSummaryTbody = resultsSummary.querySelector("tbody");
+      const resultsTable = document.getElementById("resultsTable");
+      const resultsTableThead = resultsTable.querySelector("thead");
+      const resultsTableTbody = resultsTable.querySelector("thead");
+      const testImageElement = document.getElementById("testImageElement");
+      const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
       async function getZxingTestImages() {
-        const urls = (await (await fetch("/images-zxing/images.json")).json())
+        const urls = (await (await fetch("/images/zxing/images.json")).json())
           .images;
         const images = [];
         for (let i = 0; i < urls.length; i++) {
           images.push({
             url: urls[i],
-            // content: await fetch(`${urls[i].replace(/\.png$/, ".txt")}`).then(
-            //   (r) => r.text
-            // ),
+            content: await fetch(`${urls[i].replace(/\.png$/, ".txt")}`).then(
+              (r) => r.text()
+            ),
           });
         }
         return images;
       }
 
-      const testSubjects = {
+      // --- Configuration ---
+      const testImages = await getZxingTestImages();
+
+      const testLibraries = {
         zxing: {
-          disabled: true
           name: "ZXing-js",
-          url: "/libs/@zxing_library.min.js",
+          url: "/zxing-js/index.min.js",
           checkFunc: () => typeof ZXing !== "undefined",
           scanFunc: async (imgElement) => {
             const codeReader = new ZXing.BrowserQRCodeReader();
@@ -403,22 +452,110 @@
             return { success, result, time: processingTime };
           },
         },
+        opencv_wechat_no_models: {
+          name: "OpenCV.js (Wechat, No models)",
+          url: null,
+          checkFunc: async () => {
+            if (!cvInstance) {
+              return false;
+            }
+            try {
+              opencvWechatNoModelDecoder =
+                new cvInstance.wechat_qrcode_WeChatQRCode("", "", "", "");
+
+              return !!opencvWechatNoModelDecoder;
+            } catch (e) {
+              console.error(e);
+              return false;
+            }
+          },
+          scanFunc: async (imgElement) => {
+            if (!cvInstance) {
+              console.error("OpenCV is not ready for scanning.");
+              return { success: false, result: null, time: 0 };
+            }
+
+            let result = null;
+            let success = false;
+            let processingTime = 0;
+            let src = null;
+            let points = null; // Variable to hold points matrix
+
+            const startTime = performance.now();
+            try {
+              // Draw image onto canvas to get ImageData
+              const ctx = cvCanvas.getContext("2d", {
+                willReadFrequently: true,
+              });
+              cvCanvas.width = imgElement.naturalWidth;
+              cvCanvas.height = imgElement.naturalHeight;
+              ctx.drawImage(
+                imgElement,
+                0,
+                0,
+                imgElement.naturalWidth,
+                imgElement.naturalHeight
+              );
+
+              // Read image data using OpenCV
+              src = cvInstance.imread(cvCanvas);
+              points = new cvInstance.MatVector(); // Mat to store the points
+
+              // Detect and Decode
+              const qrRes = opencvWechatNoModelDecoder.detectAndDecode(
+                src,
+                points
+              );
+
+              if (qrRes && qrRes.size() > 0) {
+                // console.log(`OpenCV decoded: ${result}`);
+                result = qrRes.get(0);
+                success = true;
+              } else {
+                // console.log('OpenCV: QR Code not found or could not be decoded.');
+                success = false;
+                result = null; // Ensure result is null on failure
+              }
+            } catch (err) {
+              console.error("OpenCV Error:", err);
+              success = false;
+              result = null;
+            } finally {
+              // IMPORTANT: Clean up OpenCV Mats to prevent memory leaks
+              if (src) src.delete();
+              if (points) points.delete();
+              //   opencvDecoder.delete(); // Clean up the detector object itself
+            }
+            const endTime = performance.now();
+            processingTime = endTime - startTime;
+            return { success, result, time: processingTime };
+          },
+        },
       };
 
-      // --- Configuration ---
-      const testImages = await getZxingTestImages();
+      for (const k in testLibraries) {
+        const cell = document.createElement("th");
+        cell.textContent = testLibraries[k].name;
+        resultsTableThead.firstElementChild.appendChild(cell);
 
-      // --- UI Elements ---
-      const librarySelect = document.getElementById("librarySelect");
-      const startButton = document.getElementById("startButton");
-      const statusDiv = document.getElementById("status");
-      const statusText = document.getElementById("statusText");
-      const progressBar = document.getElementById("progressBar");
-      const resultsDiv = document.getElementById("results");
-      const resultsText = document.getElementById("resultsText");
-      const resultsTable = document.getElementById("resultsTable");
-      const testImageElement = document.getElementById("testImageElement");
-      const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
+        const summaryRow = resultsSummaryTbody.insertRow();
+        summaryRow.insertCell().textContent = testLibraries[k].name;
+        summaryRow.insertCell().id = `${k}_total`;
+        summaryRow.insertCell().id = `${k}_success`;
+        summaryRow.insertCell().id = `${k}_rate`;
+        summaryRow.insertCell().id = `${k}_okAvgTime`;
+        summaryRow.insertCell().id = `${k}_failAvgTime`;
+        summaryRow.insertCell().id = `${k}_totalTime`;
+      }
+      testImages.forEach((image, index) => {
+        const row = resultsTableTbody.insertRow();
+        row.insertCell().textContent = index + 1;
+        row.insertCell().innerHTML = `<a href="${image.url}">View</a>`;
+        row.insertCell().innerHTML = `<code>${image.content}</code>`;
+        for (const k in testLibraries) {
+          row.insertCell().id = `res_cell_${k + "_" + index}`;
+        }
+      });
 
       // --- Library Readiness Check ---
       function checkAllLibrariesReady() {
@@ -443,7 +580,7 @@
         currentTestRunning = true;
 
         const selectedLibrary = librarySelect.value;
-        const scannerFunction = testSubjects[selectedLibrary].scanFunc;
+        const scannerFunction = testLibraries[selectedLibrary].scanFunc;
 
         if (!scannerFunction) {
           alert(`Scanner implementation for "${selectedLibrary}" not found.`);
@@ -462,7 +599,6 @@
 
         startButton.disabled = true;
         startButton.textContent = "Test Running...";
-        resultsDiv.classList.add("hidden");
         statusDiv.classList.remove("hidden");
         statusText.textContent = `Starting test for ${selectedLibrary}...`;
         progressBar.value = 0;
@@ -470,6 +606,7 @@
         let successfulScans = 0;
         let totalScanTime = 0;
         let successfulScanTime = 0;
+        let failureScanTime = 0;
         const totalImages = testImages.length;
         const resultsData = []; // Store individual results if needed
 
@@ -508,6 +645,8 @@
             if (scanResult.success) {
               successfulScans++;
               successfulScanTime += scanResult.time;
+            } else {
+              failureScanTime += scanResult.time;
             }
           } catch (error) {
             console.error(`Error processing image ${imageUrl}:`, error);
@@ -526,9 +665,6 @@
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
-        const overallEndTime = performance.now();
-        const totalTestTime = overallEndTime - overallStartTime;
-
         // --- Calculate and Display Metrics ---
         displayResults({
           library: selectedLibrary,
@@ -536,9 +672,13 @@
           successfulScans: successfulScans,
           successRate:
             totalImages > 0 ? (successfulScans / totalImages) * 100 : 0,
-          avgScanTime:
+          okAvgScanTime:
             successfulScans > 0 ? successfulScanTime / successfulScans : 0,
-          totalTestDuration: totalTestTime,
+          failAvgScanTime:
+            successfulScans < totalImages
+              ? failureScanTime / (totalImages - successfulScans)
+              : 0,
+          totalScanTime: totalScanTime,
           individualResults: resultsData, // Pass detailed results if needed for display
         });
 
@@ -550,31 +690,30 @@
       }
 
       function displayResults(metrics) {
-        resultsDiv.classList.remove("hidden");
-        let resultsOutput = `
-              Library: ${metrics.library}
-              -----------------------------------
-              Total Images Tested:    ${metrics.totalImages}
-              Successfully Decoded:   ${metrics.successfulScans}
-              Success Rate:           ${metrics.successRate.toFixed(2)}%
-              Average Time (Success): ${metrics.avgScanTime.toFixed(2)} ms
-              Total Test Time:        ${metrics.totalTestDuration.toFixed(2)} ms
-              -----------------------------------
-              `;
-        resultsText.textContent = resultsOutput;
+        document.getElementById(`${metrics.library}_total`).textContent =
+          metrics.totalImages;
+        document.getElementById(`${metrics.library}_success`).textContent =
+          metrics.successfulScans;
+        document.getElementById(`${metrics.library}_rate`).textContent =
+          metrics.successRate.toFixed(2) + "%";
+        document.getElementById(`${metrics.library}_okAvgTime`).textContent =
+          metrics.okAvgScanTime.toFixed(2) + " ms";
+        document.getElementById(`${metrics.library}_failAvgTime`).textContent =
+          metrics.failAvgScanTime.toFixed(2) + " ms";
+        document.getElementById(`${metrics.library}_totalTime`).textContent =
+          metrics.totalScanTime.toFixed(2) + " ms";
 
         const tbody = resultsTable.querySelector("tbody");
         tbody.innerHTML = ""; // Clear existing rows)
         metrics.individualResults.forEach((res, index) => {
-          const row = tbody.insertRow();
-          row.style.backgroundColor = res.success ? "" : "pink";
-          row.insertCell().textContent = index + 1;
-          row.insertCell().innerHTML = `<a href="${res.imageUrl}">View</a>`;
-          row.insertCell().innerHTML = res.success
-            ? `<code>${res.result}</code>`
-            : "";
-          row.insertCell().innerHTML = `${res.success}`;
-          row.insertCell().textContent = `${res.time.toFixed(2)} ms`;
+          const cell = document.querySelector(
+            `#res_cell_${metrics.library + "_" + index}`
+          );
+
+          cell.textContent = `${
+            res.success ? "OK" : "FAIL"
+          } (${res.time.toFixed(2)} ms)`;
+          cell.style.backgroundColor = res.success ? "lightgreen" : "pink";
         });
       }
 
@@ -594,8 +733,8 @@
         });
       }
 
-      for (const key in testSubjects) {
-        const s = testSubjects[key];
+      for (const key in testLibraries) {
+        const s = testLibraries[key];
         if (s.disabled) {
           continue;
         }
