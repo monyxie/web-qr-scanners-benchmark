@@ -29,7 +29,8 @@ git checkout "$OPENCV_CONTRIB_COMMIT"
 git apply ../opencv_contrib.patch
 popd
 
-docker run --rm -v $(pwd):/src -u $(id -u):$(id -g) emscripten/emsdk:2.0.10 emcmake python3 /src/opencv/platforms/js/build_js.py build_wasm \
+# Use "-u root" because I'm running rootless podman
+podman run --rm -v $(pwd):/src -u root emscripten/emsdk:2.0.10 emcmake python3 /src/opencv/platforms/js/build_js.py build_wasm \
             --build_wasm \
             --disable_single_file \
             --cmake_option='-DCMAKE_MAKE_PROGRAM=make' \
