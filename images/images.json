@@ -2028,5 +2028,98 @@
     {
       "url": "images/boofcv/detection/shadows/image014.jpg"
     }
+  ],
+  "collect/w-icon": [
+    {
+      "url": "images/collect/w-icon/1.png"
+    },
+    {
+      "url": "images/collect/w-icon/2.png"
+    },
+    {
+      "url": "images/collect/w-icon/3.avif"
+    },
+    {
+      "url": "images/collect/w-icon/4.avif"
+    },
+    {
+      "url": "images/collect/w-icon/5.png"
+    },
+    {
+      "url": "images/collect/w-icon/6.avif"
+    },
+    {
+      "url": "images/collect/w-icon/7.avif"
+    },
+    {
+      "url": "images/collect/w-icon/8.jpg"
+    },
+    {
+      "url": "images/collect/w-icon/9.png"
+    },
+    {
+      "url": "images/collect/w-icon/10.png"
+    },
+    {
+      "url": "images/collect/w-icon/11.png"
+    },
+    {
+      "url": "images/collect/w-icon/12.png"
+    },
+    {
+      "url": "images/collect/w-icon/13.png"
+    },
+    {
+      "url": "images/collect/w-icon/14.png"
+    }
+  ],
+  "collect/ai": [
+    {
+      "url": "images/collect/ai/1.png"
+    },
+    {
+      "url": "images/collect/ai/2.png"
+    },
+    {
+      "url": "images/collect/ai/3.png"
+    },
+    {
+      "url": "images/collect/ai/4.png"
+    },
+    {
+      "url": "images/collect/ai/5.png"
+    },
+    {
+      "url": "images/collect/ai/6.png"
+    },
+    {
+      "url": "images/collect/ai/7.png"
+    }
+  ],
+  "collect/stylized": [
+    {
+      "url": "images/collect/stylized/1.png"
+    },
+    {
+      "url": "images/collect/stylized/2.png"
+    },
+    {
+      "url": "images/collect/stylized/3.png"
+    },
+    {
+      "url": "images/collect/stylized/4.png"
+    },
+    {
+      "url": "images/collect/stylized/5.png"
+    },
+    {
+      "url": "images/collect/stylized/6.png"
+    },
+    {
+      "url": "images/collect/stylized/7.png"
+    },
+    {
+      "url": "images/collect/stylized/8.png"
+    }
   ]
 }

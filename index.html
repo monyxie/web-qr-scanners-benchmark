@@ -139,6 +139,8 @@
       // --- Global Variables ---
       let cvInstance = null;
       let currentTestRunning = false;
+      let zxingDecoder = null;
+      let zxingTryHarderDecoder = null;
       let opencvDecoder = null;
       let opencvArucoDecoder = null;
       let opencvWechatDecoder = null;
@@ -160,23 +162,71 @@
       const testImageElement = document.getElementById("testImageElement");
       const cvCanvas = document.getElementById("cvCanvas"); // Canvas for OpenCV
 
-      const imageSets = await (await fetch("images/images.json")).json();
+      const imageSets = await (
+        await fetch("images/images.json?" + Date.now())
+      ).json();
 
       // --- Configuration ---
       const testLibraries = {
         zxing: {
           name: "ZXing-js",
           url: "zxing-js/index.min.js",
-          checkFunc: () => typeof ZXing !== "undefined",
+          checkFunc: () => {
+            if (typeof ZXing !== "undefined") {
+              return true;
+            }
+            return false;
+          },
           scanFunc: async (imgElement) => {
-            const codeReader = new ZXing.BrowserQRCodeReader();
             let result = null;
             let success = false;
+            zxingDecoder = new ZXing.BrowserQRCodeReader();
             const startTime = performance.now();
             try {
-              const decodeResult = await codeReader.decodeFromImageElement(
+              const decodeResult = await zxingDecoder.decodeFromImageElement(
                 imgElement
               );
+              result = decodeResult.getText();
+              success = true;
+              // console.log(`ZXing decoded: ${result}`);
+            } catch (err) {
+              // ZXing throws an error if not found, which is expected
+              if (err instanceof ZXing.NotFoundException) {
+                // console.log('ZXing: QR Code not found.');
+              } else if (err instanceof ZXing.ChecksumException) {
+                console.warn("ZXing Checksum error:", err);
+              } else if (err instanceof ZXing.FormatException) {
+                console.warn("ZXing Format error:", err);
+              } else {
+                console.error("ZXing Error:", err);
+              }
+              success = false;
+              result = null;
+            }
+            const endTime = performance.now();
+            return { success, result, time: endTime - startTime };
+          },
+        },
+        zxing_try_harder: {
+          name: "ZXing-js (TRY_HARDER)",
+          url: "zxing-js/index.min.js",
+          checkFunc: () => {
+            if (typeof ZXing !== "undefined") {
+              return true;
+            }
+            return false;
+          },
+          scanFunc: async (imgElement) => {
+            let result = null;
+            let success = false;
+            zxingTryHarderDecoder = new ZXing.BrowserQRCodeReader();
+            const hints = new Map();
+            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+            zxingTryHarderDecoder.hints = hints;
+            const startTime = performance.now();
+            try {
+              const decodeResult =
+                await zxingTryHarderDecoder.decodeFromImageElement(imgElement);
               result = decodeResult.getText();
               success = true;
               // console.log(`ZXing decoded: ${result}`);
@@ -566,8 +616,6 @@
       let imageSetSelectPrevValue = null;
       librarySelect.addEventListener("change", checkIfReadyToStart);
       imageSetSelect.addEventListener("change", (e) => {
-        debugger;
-
         if (
           imageSetSelectPrevValue &&
           imageSetSelectPrevValue !== e.target.value

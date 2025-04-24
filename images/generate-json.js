@@ -63,7 +63,7 @@ async function findPngFiles(dir) {
         // Recursively walk subdirectories
         const subResults = await findPngFiles(fullPath);
         results.push(...subResults);
-      } else if (entry.isFile() && /\.(png|jpg)$/i.test(entry.name)) {
+      } else if (entry.isFile() && /\.(png|jpg|avif)$/i.test(entry.name)) {
         // Found a PNG file, store its path
         results.push(fullPath);
       }
@@ -188,6 +188,9 @@ async function main() {
     "boofcv/detection/shadows": await generateImagesJson(
       "boofcv/detection/shadows"
     ),
+    "collect/w-icon": await generateImagesJson("collect/w-icon"),
+    "collect/ai": await generateImagesJson("collect/ai"),
+    "collect/stylized": await generateImagesJson("collect/stylized"),
   };
   await fs.writeFile("images.json", JSON.stringify(jsonData, null, 2));
 }
