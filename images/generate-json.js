@@ -191,6 +191,7 @@ async function main() {
     "collect/w-icon": await generateImagesJson("collect/w-icon"),
     "collect/ai": await generateImagesJson("collect/ai"),
     "collect/stylized": await generateImagesJson("collect/stylized"),
+    "collect/size-matters": await generateImagesJson("collect/size-matters"),
   };
   await fs.writeFile("images.json", JSON.stringify(jsonData, null, 2));
 }

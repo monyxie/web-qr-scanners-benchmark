@@ -2121,5 +2121,46 @@
     {
       "url": "images/collect/stylized/8.png"
     }
+  ],
+  "collect/size-matters": [
+    {
+      "url": "images/collect/size-matters/100.png"
+    },
+    {
+      "url": "images/collect/size-matters/200.png"
+    },
+    {
+      "url": "images/collect/size-matters/300.png"
+    },
+    {
+      "url": "images/collect/size-matters/400.png"
+    },
+    {
+      "url": "images/collect/size-matters/500.png"
+    },
+    {
+      "url": "images/collect/size-matters/600.png"
+    },
+    {
+      "url": "images/collect/size-matters/700.png"
+    },
+    {
+      "url": "images/collect/size-matters/800.png"
+    },
+    {
+      "url": "images/collect/size-matters/1000.png"
+    },
+    {
+      "url": "images/collect/size-matters/1500.png"
+    },
+    {
+      "url": "images/collect/size-matters/2000.png"
+    },
+    {
+      "url": "images/collect/size-matters/2500.png"
+    },
+    {
+      "url": "images/collect/size-matters/3000.png"
+    }
   ]
 }

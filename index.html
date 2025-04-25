@@ -637,7 +637,7 @@
           row.insertCell().textContent = index + 1;
           row.insertCell().innerHTML = `<a href="${encodeURI(
             image.url
-          )}">View</a>`;
+          )}">${image.url.split("/").pop()}</a>`;
           for (const k in testLibraries) {
             row.insertCell().id = `res_cell_${k + "_" + index}`;
           }
