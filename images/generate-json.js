@@ -192,6 +192,11 @@ async function main() {
     "collect/ai": await generateImagesJson("collect/ai"),
     "collect/stylized": await generateImagesJson("collect/stylized"),
     "collect/size-matters": await generateImagesJson("collect/size-matters"),
+    "collect/nocode-XS": await generateImagesJson("collect/nocode-XS"),
+    "collect/nocode-S": await generateImagesJson("collect/nocode-S"),
+    "collect/nocode-M": await generateImagesJson("collect/nocode-M"),
+    "collect/nocode-L": await generateImagesJson("collect/nocode-L"),
+    "collect/nocode-XL": await generateImagesJson("collect/nocode-XL"),
   };
   await fs.writeFile("images.json", JSON.stringify(jsonData, null, 2));
 }
